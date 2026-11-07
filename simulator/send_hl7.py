@@ -204,27 +204,82 @@ def make_events(visits, now):
 
     return messages
 
+# ---------- STEP 9: THE --dry-run SWITCH ----------
+def parse_args():
+    parser = argparse.ArgumentParser(description="Send fake HL7 ADT messages to Mirth")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="print 3 messages instead of sending them")
+    return parser.parse_args()
 
+
+# ---------- STEP 10: SEND TO MIRTH (WITH DUPLICATES) ----------
+def send_all(messages):
+    sent = 0
+    rejected = 0
+
+    with MLLPClient(MIRTH_HOST, MIRTH_PORT) as client:    # open the connection once
+        for m in messages:
+            copies = 2 if m["send_twice"] else 1           # duplicates are sent twice
+            for _ in range(copies):
+                ack = client.send_message(m["text"])
+                sent += 1
+
+                if isinstance(ack, bytes):                 # the reply may come back as bytes
+                    ack = ack.decode(errors="ignore")
+                if "MSA|AA" not in ack:                    # AA = Application Accept
+                    rejected += 1
+                    print("Not accepted:", m["msg_id"])
+
+            if sent % 100 < copies:                        # progress every ~100
+                print(f"  sent {sent} ...")
+
+    print(f"Done. Sent {sent} messages, {rejected} not accepted.")
+
+
+# ---------- STEP 11: SUMMARY (YOUR ANSWER KEY) ----------
+def print_summary(patients, visits, messages):
+    a01 = sum(1 for m in messages if m["event"] == "A01")
+    a03 = sum(1 for m in messages if m["event"] == "A03")
+    dups = sum(1 for m in messages if m["send_twice"])
+    blanks = sum(1 for _, v in visits if v["doctor"] is None)
+
+    lines = [
+        "========== ANSWER KEY ==========",
+        f"Patients:            {len(patients)}",
+        f"Visits (stays):      {len(visits)}",
+        f"Readmissions:        {len(visits) - len(patients)}",
+        f"A01 admits:          {a01}",
+        f"A03 discharges:      {a03}",
+        f"Still in hospital:   {a01 - a03}",
+        f"Blank doctors:       {blanks}",
+        f"Unique messages:     {len(messages)}",
+        f"Duplicate resends:   {dups}",
+        f"Total sent to Mirth: {len(messages) + dups}",
+        "================================",
+    ]
+    print("\n".join(lines))
+
+    with open("data/answer_key.txt", "w") as f:       # keep a copy for Phases 5 and 6
+        f.write("\n".join(lines))
 
 # ---------- RUN ----------
+
 if __name__ == "__main__":
+    args = parse_args()
     now = datetime.now().replace(second=0, microsecond=0)
 
     patients, visits = build_timeline(now)
     messages = make_events(visits, now)
 
-    a01_count = sum(1 for m in messages if m["event"] == "A01")
-    a03_count = sum(1 for m in messages if m["event"] == "A03")
-    blank_doctors = sum(1 for _, v in visits if v["doctor"] is None)
+    for m in messages:                                  # decide duplicates up front
+        m["send_twice"] = random.random() < DUPLICATE_RATE
 
-    print("Patients:", len(patients))
-    print("Visits:", len(visits))
-    print("Readmissions:", len(visits) - len(patients))
-    print("A01 admits:", a01_count)
-    print("A03 discharges:", a03_count)
-    print("Still in hospital:", a01_count - a03_count)
-    print("Blank doctors:", blank_doctors)
-    print("Total messages:", len(messages))
-    print()
-    print("First message:")
-    print(messages[0]["text"].replace("\r", "\n"))
+    if args.dry_run:
+        print("DRY RUN: showing the first 3 messages, nothing is sent\n")
+        for m in messages[:3]:
+            print(m["text"].replace("\r", "\n"))
+            print()
+    else:
+        send_all(messages)
+
+    print_summary(patients, visits, messages)
