@@ -1,0 +1,392 @@
+{
+  "datasets": [
+    {
+      "name": "stays01",
+      "displayName": "stays",
+      "queryLines": [
+        "SELECT\n",
+        "  f.visit_id,\n",
+        "  f.admit_time,\n",
+        "  d.date AS admit_date,\n",
+        "  d.day_name,\n",
+        "  d.is_weekend,\n",
+        "  l.department,\n",
+        "  p.age_group,\n",
+        "  p.gender,\n",
+        "  f.priority,\n",
+        "  f.attending,\n",
+        "  f.status,\n",
+        "  f.los_hours,\n",
+        "  ROUND(f.los_hours / 24, 2) AS los_days,\n",
+        "  CAST(f.is_readmission_30d AS INT) AS readmit_flag,\n",
+        "  CASE WHEN f.status = 'in-progress' THEN 1 ELSE 0 END AS in_hospital_flag\n",
+        "FROM workspace.hl7_gold.fact_encounters f\n",
+        "JOIN workspace.hl7_gold.dim_date d ON f.admit_date_key = d.date_key\n",
+        "JOIN workspace.hl7_gold.dim_location l ON f.location_key = l.location_key\n",
+        "JOIN workspace.hl7_gold.dim_patient p ON f.patient_key = p.patient_key"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "overview",
+      "displayName": "Overview",
+      "layout": [
+        {
+          "widget": {
+            "name": "header",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Hospital Operations\n",
+                "Synthetic data from the HL7 v2 → FHIR R4 → Delta Lake pipeline (Gold star schema)."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_adm",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "count(visit_id)",
+                      "expression": "COUNT(`visit_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "count(visit_id)",
+                  "displayName": "Total admissions"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Total admissions"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_los",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "avg(los_days)",
+                      "expression": "AVG(`los_days`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(los_days)",
+                  "displayName": "Avg Length of Stay (days)",
+                  "format": {
+                    "type": "number-plain",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Avg Length of Stay (days)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_readmit",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "avg(readmit_flag)",
+                      "expression": "AVG(`readmit_flag`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "avg(readmit_flag)",
+                  "displayName": "30-day readmission rate",
+                  "format": {
+                    "type": "number-percent",
+                    "decimalPlaces": {
+                      "type": "max",
+                      "places": 1
+                    }
+                  }
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "30-day readmission rate"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "line_adm",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "daily(admit_date)",
+                      "expression": "DATE_TRUNC(\"DAY\", `admit_date`)"
+                    },
+                    {
+                      "name": "count(visit_id)",
+                      "expression": "COUNT(`visit_id`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "daily(admit_date)",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Admit date"
+                },
+                "y": {
+                  "fieldName": "count(visit_id)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Admissions"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Admissions per day"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "kpi_now",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "sum(in_hospital_flag)",
+                      "expression": "SUM(`in_hospital_flag`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "sum(in_hospital_flag)",
+                  "displayName": "Patients in hospital now"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Patients in hospital now"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 11,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_los",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "department",
+                      "expression": "`department`"
+                    },
+                    {
+                      "name": "avg(los_days)",
+                      "expression": "AVG(`los_days`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "department",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Department"
+                },
+                "y": {
+                  "fieldName": "avg(los_days)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Avg stay (days)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Avg stay by department (days)"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 11,
+            "width": 2,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "bar_now",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "stays01",
+                  "fields": [
+                    {
+                      "name": "department",
+                      "expression": "`department`"
+                    },
+                    {
+                      "name": "sum(in_hospital_flag)",
+                      "expression": "SUM(`in_hospital_flag`)"
+                    }
+                  ],
+                  "disaggregated": false
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "department",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Department"
+                },
+                "y": {
+                  "fieldName": "sum(in_hospital_flag)",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Patients"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "In hospital now by department"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 11,
+            "width": 2,
+            "height": 6
+          }
+        }
+      ],
+      "pageType": "PAGE_TYPE_CANVAS"
+    }
+  ]
+}
